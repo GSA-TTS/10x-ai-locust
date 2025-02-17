@@ -1,3 +1,0 @@
-type,time_to_first_byte,time_to_first_token,total_time,num_output_tokens,tokens_per_second,i_have_seen_paris,total_cost,status_code
-chat_completion,149,1749,6867,202,29.416047764671617,True,0.0008192,200
-chat_completion,133,1037,5997,183,30.515257628814407,True,0.0007432000000000001,200
