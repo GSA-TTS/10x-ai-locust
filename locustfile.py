@@ -5,6 +5,7 @@ import json
 import os
 import time
 import uuid
+import csv
 
 load_dotenv()
 
@@ -22,9 +23,13 @@ TOKEN_COST = {
     },
 }
 
+CUSTOM_CSV_FILE_PATH = os.getenv("CUSTOM_CSV_FILE_PATH")
+
 
 def log_custom_metrics(
     type,
+    time_to_first_byte,
+    time_to_first_token,
     total_time,
     num_output_tokens,
     tokens_per_second,
@@ -32,16 +37,41 @@ def log_custom_metrics(
     total_cost,
     status_code,
 ):
-    print("\n=== Custom Metrics ===")
-    print(f"Type: {type}")
-    print(f"Total response time: {total_time} ms")
-    print(f"Response tokens: {num_output_tokens}")
-    print(f"Response t/s: {tokens_per_second}")
-    print(f"Valid response: {i_have_seen_paris}")
-    print(f"Total cost: {total_cost}")
-    print(f"Response status code: {status_code}")
-    # TODO: add time to first token
-    # TODO: write to csv
+
+    # TODO: We should either create a unique id or timestamp test start and create new csv for new test
+    file_exists = os.path.isfile(CUSTOM_CSV_FILE_PATH)
+    with open(CUSTOM_CSV_FILE_PATH, mode="a", newline="") as csv_file:
+        fieldnames = [
+            "type",
+            "time_to_first_byte",
+            "time_to_first_token",
+            "total_time",
+            "num_output_tokens",
+            "tokens_per_second",
+            "i_have_seen_paris",
+            "total_cost",
+            "status_code",
+        ]
+        writer = csv.DictWriter(csv_file, fieldnames=fieldnames)
+
+        # Write the header only if the file does not exist
+        if not file_exists:
+            writer.writeheader()
+
+        # Write the custom metrics to the CSV file
+        writer.writerow(
+            {
+                "type": type,
+                "time_to_first_byte": time_to_first_byte,
+                "time_to_first_token": time_to_first_token,
+                "total_time": total_time,
+                "num_output_tokens": num_output_tokens,
+                "tokens_per_second": tokens_per_second,
+                "i_have_seen_paris": i_have_seen_paris,
+                "total_cost": total_cost,
+                "status_code": status_code,
+            }
+        )
 
 
 class WebsiteUser(HttpUser):
@@ -208,6 +238,8 @@ class WebsiteUser(HttpUser):
                 print(f"\nResponse status code: {response.status_code}\n")
                 self.environment.custom_event.fire(
                     type="chat_completion",
+                    time_to_first_byte=time_to_first_byte,
+                    time_to_first_token=time_to_first_token,
                     total_time=total_time,
                     num_output_tokens=num_output_tokens,
                     tokens_per_second=tokens_per_second,

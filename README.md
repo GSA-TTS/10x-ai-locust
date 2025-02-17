@@ -6,6 +6,7 @@ Load Testing Repo for GSAI
 
 Start the server locally, open in browser, send a completion, grab the bearer token and cookie (only the session value) and create and .env from the example file.
 
+- Create a python virtual environment via your preferred method.
 - `pip install -r requirements.txt`
 - `python locustfile.py`: will run continuously, for debugging, see below to run full server via docker
 
