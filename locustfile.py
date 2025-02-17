@@ -6,8 +6,22 @@ import os
 import time
 import uuid
 import csv
+import logging
+import sys
 
 load_dotenv()
+
+# Set up logging
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
+
+# TODO: Locust seems to be hijacking the log stream
+# Add StreamHandler to ensure logs are output to the console
+console_handler = logging.StreamHandler(sys.stdout)
+console_handler.setLevel(logging.DEBUG)
+formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+console_handler.setFormatter(formatter)
+logger.addHandler(console_handler)
 
 # https://aws.amazon.com/bedrock/pricing/
 TOKEN_COST = {
@@ -54,11 +68,9 @@ def log_custom_metrics(
         ]
         writer = csv.DictWriter(csv_file, fieldnames=fieldnames)
 
-        # Write the header only if the file does not exist
         if not file_exists:
             writer.writeheader()
 
-        # Write the custom metrics to the CSV file
         writer.writerow(
             {
                 "type": type,
@@ -75,14 +87,14 @@ def log_custom_metrics(
 
 
 class WebsiteUser(HttpUser):
-    wait_time = between(5, 45)  # simulates user wait time between requests
+    wait_time = between(5, 45)  # simulates user stopping to think between requests
     host = os.getenv("GSAI_HOST")
 
     def on_start(self):
-        print("\n=== Host Configuration ===")
-        print(f"Env var GSAI_HOST: {os.getenv('GSAI_HOST')}")
-        print(f"Self.host value: {self.host}")
-        print(f"Type of host: {type(self.host)}")
+        logger.debug("\n=== Host Configuration ===")
+        logger.debug(f"Env var GSAI_HOST: {os.getenv('GSAI_HOST')}")
+        logger.debug(f"Self.host value: {self.host}")
+        logger.debug(f"Type of host: {type(self.host)}")
 
         session = os.getenv("SESSION")
         auth_token = os.getenv("GSA_AUTH_TOKEN")
@@ -107,10 +119,10 @@ class WebsiteUser(HttpUser):
         message_id = str(uuid.uuid4())
         current_time = int(time.time())
 
-        print(f"\n===Starting new chat completion request ===")
-        print(f"Chat ID: {chat_id}")
-        print(f"Message ID: {message_id}")
-        print(f"Current time: {current_time}")
+        logger.debug(f"\n===Starting new chat completion request ===")
+        logger.debug(f"Chat ID: {chat_id}")
+        logger.debug(f"Message ID: {message_id}")
+        logger.debug(f"Current time: {current_time}")
 
         model_id = os.getenv("CHAT_MODEL")
 
@@ -133,12 +145,7 @@ class WebsiteUser(HttpUser):
             "features": {"web_search": False},
         }
 
-        # print(f"\nSending request with payload:")
-        # print(json.dumps(completion_payload, indent=2))
-        # print(self.client.headers)
-
-        # request initiation time in milliseconds
-        request_initiation_time = int(time.time() * 1000)
+        request_initiation_time = int(time.time() * 1000)  # in ms
         with self.client.post(
             "/api/chat/completions",
             json=completion_payload,
@@ -156,15 +163,14 @@ class WebsiteUser(HttpUser):
                 response_initiation_time = int(time.time() * 1000)
                 time_to_last_byte = response_initiation_time
                 time_to_first_byte = response_initiation_time - request_initiation_time
-                time_to_first_token = 0
-                print(f"Time to first byte: {time_to_first_byte} ms")
+                logger.debug(f"Time to first byte: {time_to_first_byte} ms")
                 for chunk in response.iter_content(chunk_size=None):
                     chunk_initiation_time = int(time.time() * 1000)
                     if num_chunks == 0:
                         time_to_first_token = (
                             chunk_initiation_time - response_initiation_time
                         )
-                        print(f"Time to first token: {time_to_first_token} ms")
+                        logger.debug(f"Time to first token: {time_to_first_token} ms")
 
                     time_since_previous_chunk = (
                         chunk_initiation_time - time_to_last_byte
@@ -184,7 +190,7 @@ class WebsiteUser(HttpUser):
                         data_json = response_text[data_start:data_end]
                         response_text = response_text[data_end + 1 :]
                         if data_json.strip() == "[DONE]":
-                            print("Received [DONE] message")
+                            logger.debug("Received [DONE] message")
                             break
                         try:
                             data = json.loads(data_json)
@@ -194,7 +200,7 @@ class WebsiteUser(HttpUser):
                                     "finish_reason" in choices[0]
                                     and choices[0]["finish_reason"] == "stop"
                                 ):
-                                    # print("Received stop message")
+                                    # logger.debug("Received stop message")
                                     finished = True
                                     break
                                 for choice in choices:
@@ -208,7 +214,7 @@ class WebsiteUser(HttpUser):
                                 time_to_last_byte = int(time.time() * 1000)
 
                         except json.JSONDecodeError:
-                            print(f"Failed to parse line: {data_json}")
+                            logger.debug(f"Failed to parse line: {data_json}")
                             continue
                     if finished or failed:
                         if i_have_seen_paris:
@@ -220,22 +226,22 @@ class WebsiteUser(HttpUser):
 
                 if response.status_code != 200:
                     error_msg = f"Received status code: {response.status_code}"
-                    print(f"\nError: {error_msg}")
-                    print(f"Response content: {response.content}")
+                    logger.debug(f"\nError: {error_msg}")
+                    logger.debug(f"Response content: {response.content}")
                     response.failure(error_msg)
 
-                # print(f"Complete response text: {complete_text}")
+                # logger.debug(f"Complete response text: {complete_text}")
                 num_output_tokens = len(complete_text.split())
                 output_cost = num_output_tokens * TOKEN_COST["output"][model_id]
                 total_cost = input_cost + output_cost
                 total_time = int(time.time() * 1000) - request_initiation_time
                 tokens_per_second = num_output_tokens / (total_time / 1000)
-                print(f"Total response time: {total_time} ms")
-                print(f"Response tokens: {num_output_tokens}")
-                print(f"Response t/s: {tokens_per_second}")
-                print(f"Valid response: {i_have_seen_paris}")
-                print(f"Total cost: {total_cost}")
-                print(f"\nResponse status code: {response.status_code}\n")
+                logger.debug(f"Total response time: {total_time} ms")
+                logger.debug(f"Response tokens: {num_output_tokens}")
+                logger.debug(f"Response t/s: {tokens_per_second}")
+                logger.debug(f"Valid response: {i_have_seen_paris}")
+                logger.debug(f"Total cost: {total_cost}")
+                logger.debug(f"\nResponse status code: {response.status_code}\n")
                 self.environment.custom_event.fire(
                     type="chat_completion",
                     time_to_first_byte=time_to_first_byte,
@@ -250,10 +256,10 @@ class WebsiteUser(HttpUser):
 
             except Exception as e:
                 error_msg = f"Request failed: {str(e)}"
-                print(f"\nException occurred: {error_msg}")
+                logger.debug(f"\nException occurred: {error_msg}")
                 response.failure(error_msg)
 
-        print("=== Chat completion request finished ===\n")
+        logger.debug("=== Chat completion request finished ===\n")
 
     # Define a custom event for logging additional metrics
     @events.init.add_listener
@@ -265,7 +271,9 @@ class WebsiteUser(HttpUser):
     @events.test_stop.add_listener
     def on_test_stop(environment, **_kwargs):
         # Flush or process the collected custom metrics here if needed
-        print("Test has stopped!")  # or use print statements for flush console output
+        logger.debug(
+            "Test has stopped!"
+        )  # or use logger.debug statements for flush console output
 
 
 # if launched directly for debugging, e.g. "python3 locustfile.py", not "locust -f locustfile.py"
