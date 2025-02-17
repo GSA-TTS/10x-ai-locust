@@ -2,6 +2,13 @@
 
 Load Testing Repo for GSAI
 
+## Local Quickstart
+
+Start the server locally, open in browser, send a completion, grab the bearer token and cookie (only the session value) and create and .env from the example file.
+
+- `pip install -r requirements.txt`
+- `python locustfile.py`: will run continuously, for debugging, see below to run full server via docker
+
 ## Overview
 
 This repository contains a Locust load testing script designed to test the GSAI chat completion API under various load conditions. The script is configured to simulate user behavior, sending POST requests to the API and verifying the responses.
