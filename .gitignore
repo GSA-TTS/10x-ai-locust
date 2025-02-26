@@ -4,3 +4,4 @@ venv
 .virtualenv
 virtualenv
 custom_metrics.csv
+__pycache__/
