@@ -1,19 +1,39 @@
 version: '3'
 
-# Run the test with 1 master and 4 workers
-# docker-compose up --scale worker=4
+# Run the test with 1 orchestrator and 4 workers
+# docker compose up --scale worker=4
 
 services:
-  master:
-    image: locustio/locust
+  orchestrator:
+    # image: locustio/locust
+    build: .
     ports:
      - "8089:8089"
+    environment:
+      CHAT_MODEL: ${CHAT_MODEL}
+      USER_PROMPT: ${USER_PROMPT}
+      CONTENT_VALIDATION_STRING: ${CONTENT_VALIDATION_STRING}
+      GSA_AUTH_TOKEN: ${GSA_AUTH_TOKEN}
+      SESSION: ${SESSION}
+      GSAI_HOST: ${GSAI_HOST}
+      CUSTOM_CSV_FILE_PATH: ${CUSTOM_CSV_FILE_PATH}
+      LOCUST_HOST: ${GSAI_HOST}
     volumes:
       - ./:/mnt/locust
-    command: -f /mnt/locust/locustfile.py --master -H http://master:8089
+    command: -f /mnt/locust/locustfile.py --orchestrator -H http://orchestrator:8089
   
   worker:
-    image: locustio/locust
+    # image: locustio/locust
+    build: .
+    environment:
+      CHAT_MODEL: ${CHAT_MODEL}
+      USER_PROMPT: ${USER_PROMPT}
+      CONTENT_VALIDATION_STRING: ${CONTENT_VALIDATION_STRING}
+      GSA_AUTH_TOKEN: ${GSA_AUTH_TOKEN}
+      SESSION: ${SESSION}
+      GSAI_HOST: ${GSAI_HOST}
+      CUSTOM_CSV_FILE_PATH: ${CUSTOM_CSV_FILE_PATH}
+      LOCUST_HOST: ${LOCUST_HOST}
     volumes:
       - ./:/mnt/locust
-    command: -f /mnt/locust/locustfile.py --worker --master-host master
+    command: -f /mnt/locust/locustfile.py --worker --orchestrator-host orchestrator

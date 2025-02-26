@@ -6,49 +6,58 @@ import os
 import time
 import uuid
 import csv
+import traceback
 
 load_dotenv()
 
 # https://aws.amazon.com/bedrock/pricing/
 TOKEN_COST = {
     "input": {
+        "bedrock_claude_haiku35_pipeline_mock": 0.0,
         "bedrock_claude_haiku35_pipeline": 0.0008 / 1000,
         "bedrock_llama32_11b_pipeline": 0.00016 / 1000,
         "bedrock_claude_sonnet35_v2_pipeline": 0.003 / 1000,
     },
     "output": {
+        "bedrock_claude_haiku35_pipeline_mock": 0.0,
         "bedrock_claude_haiku35_pipeline": 0.004 / 1000,
         "bedrock_llama32_11b_pipeline": 0.00016 / 1000,
         "bedrock_claude_sonnet35_v2_pipeline": 0.015 / 1000,
     },
 }
 
-CUSTOM_CSV_FILE_PATH = os.getenv("CUSTOM_CSV_FILE_PATH")
+CUSTOM_CSV_FILE_NAME = "custom_metrics"  # os.getenv("CUSTOM_CSV_FILE_NAME")
+
+test_start_time = int(time.time())
 
 
 def log_custom_metrics(
     type,
+    model_id,
+    start_time,
     time_to_first_byte,
     time_to_first_token,
     total_time,
     num_output_tokens,
     tokens_per_second,
-    i_have_seen_paris,
+    content_validated,
     total_cost,
     status_code,
 ):
 
-    # TODO: We should either create a unique id or timestamp test start and create new csv for new test
-    file_exists = os.path.isfile(CUSTOM_CSV_FILE_PATH)
-    with open(CUSTOM_CSV_FILE_PATH, mode="a", newline="") as csv_file:
+    csv_path = f"{model_id}_{start_time}.csv"
+    file_exists = os.path.isfile(csv_path)
+
+    with open(csv_path, mode="a", newline="") as csv_file:
         fieldnames = [
             "type",
+            "model_id",
             "time_to_first_byte",
             "time_to_first_token",
             "total_time",
             "num_output_tokens",
             "tokens_per_second",
-            "i_have_seen_paris",
+            "content_validated",
             "total_cost",
             "status_code",
         ]
@@ -62,12 +71,13 @@ def log_custom_metrics(
         writer.writerow(
             {
                 "type": type,
+                "model_id": model_id,
                 "time_to_first_byte": time_to_first_byte,
                 "time_to_first_token": time_to_first_token,
                 "total_time": total_time,
                 "num_output_tokens": num_output_tokens,
                 "tokens_per_second": tokens_per_second,
-                "i_have_seen_paris": i_have_seen_paris,
+                "content_validated": content_validated,
                 "total_cost": total_cost,
                 "status_code": status_code,
             }
@@ -75,8 +85,9 @@ def log_custom_metrics(
 
 
 class WebsiteUser(HttpUser):
-    wait_time = between(5, 45)  # simulates user wait time between requests
+    wait_time = between(10, 30)  # simulates user wait time between requests
     host = os.getenv("GSAI_HOST")
+    start_time = None
 
     def on_start(self):
         print("\n=== Host Configuration ===")
@@ -84,6 +95,7 @@ class WebsiteUser(HttpUser):
         print(f"Self.host value: {self.host}")
         print(f"Type of host: {type(self.host)}")
 
+        self.start_time = test_start_time
         session = os.getenv("SESSION")
         auth_token = os.getenv("GSA_AUTH_TOKEN")
         self.client.headers = {
@@ -97,7 +109,7 @@ class WebsiteUser(HttpUser):
             "Pragma": "no-cache",
             "Cache-Control": "no-cache",
             "Authorization": f"Bearer {auth_token}",
-            "Cookie": f"session={session}; token={auth_token}",
+            "Cookie": f"token={auth_token}",  # f"session={session}; token={auth_token}",
             "Content-Type": "application/json",
         }
 
@@ -114,7 +126,8 @@ class WebsiteUser(HttpUser):
 
         model_id = os.getenv("CHAT_MODEL")
 
-        content = "Please tell me the capital of France. Please write 2-3 paragraphs about the city."
+        content = os.getenv("USER_PROMPT")
+        content_validation_string = os.getenv("CONTENT_VALIDATION_STRING")
         num_input_tokens = len(content.split())
         input_cost = num_input_tokens * TOKEN_COST["input"][model_id]
 
@@ -128,7 +141,7 @@ class WebsiteUser(HttpUser):
                 }
             ],
             "params": {},
-            "background_tasks": {"title_generation": True, "tags_generation": False},
+            "background_tasks": {"title_generation": False, "tags_generation": False},
             "chat_id": chat_id,
             "features": {"web_search": False},
         }
@@ -144,10 +157,11 @@ class WebsiteUser(HttpUser):
             json=completion_payload,
             name="/api/chat/completions",
             catch_response=True,
+            verify=False,
             stream=True,
         ) as response:
             try:
-                i_have_seen_paris = False
+                content_validated = False
                 finished = False
                 failed = False
                 num_chunks = 0
@@ -159,25 +173,25 @@ class WebsiteUser(HttpUser):
                 time_to_first_token = 0
                 print(f"Time to first byte: {time_to_first_byte} ms")
                 for chunk in response.iter_content(chunk_size=None):
-                    chunk_initiation_time = int(time.time() * 1000)
-                    if num_chunks == 0:
-                        time_to_first_token = (
-                            chunk_initiation_time - response_initiation_time
-                        )
-                        print(f"Time to first token: {time_to_first_token} ms")
-
-                    time_since_previous_chunk = (
-                        chunk_initiation_time - time_to_last_byte
-                    )
-
-                    if time_since_previous_chunk > 10 * 1000:
-                        response.failure(
-                            f"Unnacceptable delay between tokens: {time_since_previous_chunk} ms"
-                        )
-                        failed = True
-                        break
                     response_text += chunk.decode("utf-8")
                     while "data:" in response_text:
+                        chunk_initiation_time = int(time.time() * 1000)
+                        if num_chunks == 0:
+                            time_to_first_token = (
+                                chunk_initiation_time - request_initiation_time
+                            )
+                            print(f"Time to first token: {time_to_first_token} ms")
+
+                        time_since_previous_chunk = (
+                            chunk_initiation_time - time_to_last_byte
+                        )
+
+                        if time_since_previous_chunk > 10 * 1000:
+                            response.failure(
+                                f"Unnacceptable delay between tokens: {time_since_previous_chunk} ms"
+                            )
+                            failed = True
+                            break
                         delimiter = "data: "
                         data_start = response_text.index(delimiter) + len(delimiter)
                         data_end = response_text.index("\n", data_start)
@@ -185,6 +199,7 @@ class WebsiteUser(HttpUser):
                         response_text = response_text[data_end + 1 :]
                         if data_json.strip() == "[DONE]":
                             print("Received [DONE] message")
+                            finished = True
                             break
                         try:
                             data = json.loads(data_json)
@@ -202,26 +217,34 @@ class WebsiteUser(HttpUser):
                                         if "content" in choice["delta"]:
                                             complete_text += choice["delta"]["content"]
                                             tokens = choice["delta"]["content"].lower()
-                                            if "paris" in tokens:
-                                                i_have_seen_paris = True
+                                            if content_validation_string in tokens:
+                                                content_validated = True
                                             num_chunks += 1
                                 time_to_last_byte = int(time.time() * 1000)
 
                         except json.JSONDecodeError:
                             print(f"Failed to parse line: {data_json}")
                             continue
+                    if tokens < 271:
+                        response.failure(
+                            f"Invalid response - 271 tokens expected, received: {tokens}"
+                        )
+                        break
+
                     if finished or failed:
-                        if i_have_seen_paris:
+                        if content_validated:
                             response.success()
                             break
                         else:
-                            response.failure("I am finished. I never saw Paris.")
+                            response.failure(
+                                f"Content validation fail for text (last 100 chars): ...{complete_text[:100]}"
+                            )
                             break
 
                 if response.status_code != 200:
                     error_msg = f"Received status code: {response.status_code}"
                     print(f"\nError: {error_msg}")
-                    print(f"Response content: {response.content}")
+                    # print(f"Response content: {response.content}")
                     response.failure(error_msg)
 
                 # print(f"Complete response text: {complete_text}")
@@ -233,24 +256,28 @@ class WebsiteUser(HttpUser):
                 print(f"Total response time: {total_time} ms")
                 print(f"Response tokens: {num_output_tokens}")
                 print(f"Response t/s: {tokens_per_second}")
-                print(f"Valid response: {i_have_seen_paris}")
+                print(f"Valid response: {content_validated}")
                 print(f"Total cost: {total_cost}")
                 print(f"\nResponse status code: {response.status_code}\n")
                 self.environment.custom_event.fire(
+                    start_time=self.start_time,
+                    model_id=model_id,
                     type="chat_completion",
                     time_to_first_byte=time_to_first_byte,
                     time_to_first_token=time_to_first_token,
                     total_time=total_time,
                     num_output_tokens=num_output_tokens,
                     tokens_per_second=tokens_per_second,
-                    i_have_seen_paris=i_have_seen_paris,
+                    content_validated=content_validated,
                     total_cost=total_cost,
                     status_code=response.status_code,
                 )
 
             except Exception as e:
                 error_msg = f"Request failed: {str(e)}"
+                full_traceback = traceback.format_exc()
                 print(f"\nException occurred: {error_msg}")
+                print(f"Full traceback:\n{full_traceback}")
                 response.failure(error_msg)
 
         print("=== Chat completion request finished ===\n")
