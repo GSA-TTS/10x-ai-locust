@@ -17,6 +17,7 @@ TOKEN_COST = {
         "bedrock_claude_haiku35_pipeline": 0.0008 / 1000,
         "bedrock_llama32_11b_pipeline": 0.00016 / 1000,
         "bedrock_claude_sonnet35_v2_pipeline": 0.003 / 1000,
+        "llama3.2:1b": 0.00016 / 1000,
     },
     "output": {
         "bedrock_claude_haiku35_pipeline_mock": 0.0,
@@ -109,11 +110,12 @@ class WebsiteUser(HttpUser):
             "Pragma": "no-cache",
             "Cache-Control": "no-cache",
             "Authorization": f"Bearer {auth_token}",
-            "Cookie": f"token={auth_token}",  # f"session={session}; token={auth_token}",
+            # Make sure that headers are set across both test cases. 
             "Content-Type": "application/json",
+            "Cookie": f"session={session}; token={auth_token}",
         }
 
-    @task
+    @task(0)
     def chat_completion(self):
         chat_id = str(uuid.uuid4())
         message_id = str(uuid.uuid4())
@@ -310,6 +312,47 @@ class WebsiteUser(HttpUser):
                 print(f"Failed to parse response: {response.text}\n")
 
         # print("=== Chat completion request finished ===\n")
+
+    @task(1)
+    def file_upload(self):
+        current_time = int(time.time())
+
+        print(f"\n===Starting new file upload request ===")
+        print(f"Current time: {current_time}")
+
+        pdf_filepath = './test2.pdf'
+        request_initiation_time = int(time.time() * 1000)
+        total_time = 0
+        try:
+            with open(pdf_filepath, 'rb') as f:
+            
+                with self.client.post(
+                    "/api/v1/files/",
+                    files={"file": f},
+                    catch_response=True,
+                    stream=True
+                ) as response:
+
+                    try:
+                        if response.status_code != 200:
+                            error_msg = f"Received status code: {response.status_code}"
+                            print(f"\nError: {error_msg}")
+                            print(f"Response content: {response.content}")
+                            response.failure(error_msg)
+
+                        print(f"Total response time: {total_time} ms")
+                        print(f"\nResponse status code: {response.status_code}\n")
+                        print("=== PDF File upload finished ===\n")
+
+                    except Exception as e:
+                        total_time = int(time.time() * 1000) - request_initiation_time
+                        error_msg = f"An error occured when trying to upload the file: {e}"
+                        response.failure(e)
+
+        except FileNotFoundError as fnfe:
+            total_time = int(time.time() * 1000) - request_initiation_time
+            error_msg = f"Error occurred trying to access the file {pdf_filepath}: {fnfe}"
+            print(f"An error occurred trying to access the file {pdf_filepath}: {fnfe}")
 
     # Define a custom event for logging additional metrics
     @events.init.add_listener
