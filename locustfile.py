@@ -111,11 +111,10 @@ class WebsiteUser(HttpUser):
             "Cache-Control": "no-cache",
             "Authorization": f"Bearer {auth_token}",
             # Make sure that headers are set across both test cases. 
-            "Content-Type": "application/json",
             "Cookie": f"session={session}; token={auth_token}",
         }
 
-    @task(0)
+    @task
     def chat_completion(self):
         chat_id = str(uuid.uuid4())
         message_id = str(uuid.uuid4())
@@ -127,8 +126,12 @@ class WebsiteUser(HttpUser):
         print(f"Current time: {current_time}")
 
         model_id = os.getenv("CHAT_MODEL")
-
         content = os.getenv("USER_PROMPT")
+
+        # Add application/json header
+        headers = {"Content-Type": "application/json"}
+
+
         content_validation_string = os.getenv("CONTENT_VALIDATION_STRING")
         num_input_tokens = len(content.split())
         input_cost = num_input_tokens * TOKEN_COST["input"][model_id]
@@ -148,10 +151,6 @@ class WebsiteUser(HttpUser):
             "features": {"web_search": False},
         }
 
-        # print(f"\nSending request with payload:")
-        # print(json.dumps(completion_payload, indent=2))
-        # print(self.client.headers)
-
         # request initiation time in milliseconds
         request_initiation_time = int(time.time() * 1000)
         with self.client.post(
@@ -161,6 +160,7 @@ class WebsiteUser(HttpUser):
             catch_response=True,
             verify=False,
             stream=True,
+            headers=headers,
         ) as response:
             try:
                 content_validated = False
@@ -305,6 +305,7 @@ class WebsiteUser(HttpUser):
             catch_response=True,
             verify=False,
             stream=False,
+            headers=headers,
         ) as response:
             try:
                 print(f"Completed response status: {response.status_code}\n")
@@ -313,7 +314,7 @@ class WebsiteUser(HttpUser):
 
         # print("=== Chat completion request finished ===\n")
 
-    @task(1)
+    @task
     def file_upload(self):
         current_time = int(time.time())
 
