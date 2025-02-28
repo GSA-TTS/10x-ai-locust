@@ -171,7 +171,6 @@ class WebsiteUser(HttpUser):
                 time_to_last_byte = response_initiation_time
                 time_to_first_byte = response_initiation_time - request_initiation_time
                 time_to_first_token = 0
-                # print(f"Time to first byte: {time_to_first_byte} ms")
                 for chunk in response.iter_content(chunk_size=None):
                     response_text += chunk.decode("utf-8")
                     while "data:" in response_text:
@@ -180,7 +179,6 @@ class WebsiteUser(HttpUser):
                             time_to_first_token = (
                                 chunk_initiation_time - request_initiation_time
                             )
-                            # print(f"Time to first token: {time_to_first_token} ms")
 
                         time_since_previous_chunk = (
                             chunk_initiation_time - time_to_last_byte
@@ -198,7 +196,6 @@ class WebsiteUser(HttpUser):
                         data_json = response_text[data_start:data_end]
                         response_text = response_text[data_end + 1 :]
                         if data_json.strip() == "[DONE]":
-                            # print("Received [DONE] message")
                             finished = True
                             break
                         try:
@@ -209,7 +206,6 @@ class WebsiteUser(HttpUser):
                                     "finish_reason" in choices[0]
                                     and choices[0]["finish_reason"] == "stop"
                                 ):
-                                    # print("Received stop message")
                                     finished = True
                                     break
                                 for choice in choices:
@@ -239,20 +235,13 @@ class WebsiteUser(HttpUser):
                 if response.status_code != 200:
                     error_msg = f"Received status code: {response.status_code}"
                     print(f"\nError: {error_msg}")
-                    # print(f"Response content: {response.content}")
                     response.failure(error_msg)
 
-                # print(f"Complete response text: {complete_text}")
                 num_output_tokens = len(complete_text.split())
                 output_cost = num_output_tokens * TOKEN_COST["output"][model_id]
                 total_cost = input_cost + output_cost
                 total_time = int(time.time() * 1000) - request_initiation_time
                 tokens_per_second = num_output_tokens / (total_time / 1000)
-                # print(f"Total response time: {total_time} ms")
-                # print(f"Response tokens: {num_output_tokens}")
-                # print(f"Response t/s: {tokens_per_second}")
-                # print(f"Valid response: {content_validated}")
-                # print(f"Total cost: {total_cost}")
                 print(f"\nCompletion response status code: {response.status_code}\n")
                 self.environment.custom_event.fire(
                     start_time=self.start_time,
@@ -310,7 +299,6 @@ class WebsiteUser(HttpUser):
             except:
                 print(f"Failed to parse response: {response.text}\n")
 
-        # print("=== Chat completion request finished ===\n")
 
     @task
     def file_upload(self):
