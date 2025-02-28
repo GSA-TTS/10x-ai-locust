@@ -1,2 +1,0 @@
-type,model_id,time_to_first_byte,time_to_first_token,total_time,num_output_tokens,tokens_per_second,content_validated,total_cost,status_code
-chat_completion,bedrock_claude_haiku35_pipeline_mock,668,672,11092,271,24.43202307969708,True,0.0,200
