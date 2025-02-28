@@ -17,7 +17,6 @@ TOKEN_COST = {
         "bedrock_claude_haiku35_pipeline": 0.0008 / 1000,
         "bedrock_llama32_11b_pipeline": 0.00016 / 1000,
         "bedrock_claude_sonnet35_v2_pipeline": 0.003 / 1000,
-        "llama3.2:1b": 0.00016 / 1000,
     },
     "output": {
         "bedrock_claude_haiku35_pipeline_mock": 0.0,
@@ -110,7 +109,6 @@ class WebsiteUser(HttpUser):
             "Pragma": "no-cache",
             "Cache-Control": "no-cache",
             "Authorization": f"Bearer {auth_token}",
-            # Make sure that headers are set across both test cases. 
             "Cookie": f"session={session}; token={auth_token}",
         }
 
