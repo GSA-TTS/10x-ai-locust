@@ -109,7 +109,7 @@ class WebsiteUser(HttpUser):
             "Pragma": "no-cache",
             "Cache-Control": "no-cache",
             "Authorization": f"Bearer {auth_token}",
-            "Cookie": f"session={session}; token={auth_token}",
+            "Cookie": f"token={auth_token}", # f"session={session}; token={auth_token}",
         }
 
     @task
