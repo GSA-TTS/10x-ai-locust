@@ -171,7 +171,7 @@ class WebsiteUser(HttpUser):
                 time_to_last_byte = response_initiation_time
                 time_to_first_byte = response_initiation_time - request_initiation_time
                 time_to_first_token = 0
-                print(f"Time to first byte: {time_to_first_byte} ms")
+                # print(f"Time to first byte: {time_to_first_byte} ms")
                 for chunk in response.iter_content(chunk_size=None):
                     response_text += chunk.decode("utf-8")
                     while "data:" in response_text:
@@ -180,7 +180,7 @@ class WebsiteUser(HttpUser):
                             time_to_first_token = (
                                 chunk_initiation_time - request_initiation_time
                             )
-                            print(f"Time to first token: {time_to_first_token} ms")
+                            # print(f"Time to first token: {time_to_first_token} ms")
 
                         time_since_previous_chunk = (
                             chunk_initiation_time - time_to_last_byte
@@ -198,7 +198,7 @@ class WebsiteUser(HttpUser):
                         data_json = response_text[data_start:data_end]
                         response_text = response_text[data_end + 1 :]
                         if data_json.strip() == "[DONE]":
-                            print("Received [DONE] message")
+                            # print("Received [DONE] message")
                             finished = True
                             break
                         try:
@@ -225,11 +225,6 @@ class WebsiteUser(HttpUser):
                         except json.JSONDecodeError:
                             print(f"Failed to parse line: {data_json}")
                             continue
-                    if tokens < 271:
-                        response.failure(
-                            f"Invalid response - 271 tokens expected, received: {tokens}"
-                        )
-                        break
 
                     if finished or failed:
                         if content_validated:
@@ -253,12 +248,12 @@ class WebsiteUser(HttpUser):
                 total_cost = input_cost + output_cost
                 total_time = int(time.time() * 1000) - request_initiation_time
                 tokens_per_second = num_output_tokens / (total_time / 1000)
-                print(f"Total response time: {total_time} ms")
-                print(f"Response tokens: {num_output_tokens}")
-                print(f"Response t/s: {tokens_per_second}")
-                print(f"Valid response: {content_validated}")
-                print(f"Total cost: {total_cost}")
-                print(f"\nResponse status code: {response.status_code}\n")
+                # print(f"Total response time: {total_time} ms")
+                # print(f"Response tokens: {num_output_tokens}")
+                # print(f"Response t/s: {tokens_per_second}")
+                # print(f"Valid response: {content_validated}")
+                # print(f"Total cost: {total_cost}")
+                print(f"\nCompletion response status code: {response.status_code}\n")
                 self.environment.custom_event.fire(
                     start_time=self.start_time,
                     model_id=model_id,
@@ -280,7 +275,41 @@ class WebsiteUser(HttpUser):
                 print(f"Full traceback:\n{full_traceback}")
                 response.failure(error_msg)
 
-        print("=== Chat completion request finished ===\n")
+        # dummy completed payload
+        completed_payload = {
+            "model": "bedrock_claude_haiku35_pipeline_mock",
+            "messages": [
+                {
+                    "id": message_id,
+                    "role": "user",
+                    "content": content,
+                    "timestamp": request_initiation_time,
+                },
+                {
+                    "id": "930fc556-db14-4a04-9097-e454aa788491",
+                    "role": "assistant",
+                    "content": complete_text,
+                    "timestamp": time_to_first_token,
+                },
+            ],
+            "chat_id": chat_id,
+            "session_id": "qTARVcxc0i6vumNPAAAB",
+            "id": "930fc556-db14-4a04-9097-e454aa788491",
+        }
+        with self.client.post(
+            "/api/chat/completed",
+            json=completed_payload,
+            name="/api/chat/completed",
+            catch_response=True,
+            verify=False,
+            stream=False,
+        ) as response:
+            try:
+                print(f"Completed response status: {response.status_code}\n")
+            except:
+                print(f"Failed to parse response: {response.text}\n")
+
+        # print("=== Chat completion request finished ===\n")
 
     # Define a custom event for logging additional metrics
     @events.init.add_listener
