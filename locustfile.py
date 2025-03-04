@@ -109,8 +109,7 @@ class WebsiteUser(HttpUser):
             "Pragma": "no-cache",
             "Cache-Control": "no-cache",
             "Authorization": f"Bearer {auth_token}",
-            "Cookie": f"token={auth_token}",  # f"session={session}; token={auth_token}",
-            "Content-Type": "application/json",
+            "Cookie": f"token={auth_token}", # f"session={session}; token={auth_token}",
         }
 
     @task
@@ -125,8 +124,12 @@ class WebsiteUser(HttpUser):
         print(f"Current time: {current_time}")
 
         model_id = os.getenv("CHAT_MODEL")
-
         content = os.getenv("USER_PROMPT")
+
+        # Add application/json header
+        headers = {"Content-Type": "application/json"}
+
+
         content_validation_string = os.getenv("CONTENT_VALIDATION_STRING")
         num_input_tokens = len(content.split())
         input_cost = num_input_tokens * TOKEN_COST["input"][model_id]
@@ -146,10 +149,6 @@ class WebsiteUser(HttpUser):
             "features": {"web_search": False},
         }
 
-        # print(f"\nSending request with payload:")
-        # print(json.dumps(completion_payload, indent=2))
-        # print(self.client.headers)
-
         # request initiation time in milliseconds
         request_initiation_time = int(time.time() * 1000)
         with self.client.post(
@@ -159,6 +158,7 @@ class WebsiteUser(HttpUser):
             catch_response=True,
             verify=False,
             stream=True,
+            headers=headers,
         ) as response:
             try:
                 content_validated = False
@@ -171,7 +171,6 @@ class WebsiteUser(HttpUser):
                 time_to_last_byte = response_initiation_time
                 time_to_first_byte = response_initiation_time - request_initiation_time
                 time_to_first_token = 0
-                # print(f"Time to first byte: {time_to_first_byte} ms")
                 for chunk in response.iter_content(chunk_size=None):
                     response_text += chunk.decode("utf-8")
                     while "data:" in response_text:
@@ -180,7 +179,6 @@ class WebsiteUser(HttpUser):
                             time_to_first_token = (
                                 chunk_initiation_time - request_initiation_time
                             )
-                            # print(f"Time to first token: {time_to_first_token} ms")
 
                         time_since_previous_chunk = (
                             chunk_initiation_time - time_to_last_byte
@@ -198,7 +196,6 @@ class WebsiteUser(HttpUser):
                         data_json = response_text[data_start:data_end]
                         response_text = response_text[data_end + 1 :]
                         if data_json.strip() == "[DONE]":
-                            # print("Received [DONE] message")
                             finished = True
                             break
                         try:
@@ -209,7 +206,6 @@ class WebsiteUser(HttpUser):
                                     "finish_reason" in choices[0]
                                     and choices[0]["finish_reason"] == "stop"
                                 ):
-                                    # print("Received stop message")
                                     finished = True
                                     break
                                 for choice in choices:
@@ -239,20 +235,13 @@ class WebsiteUser(HttpUser):
                 if response.status_code != 200:
                     error_msg = f"Received status code: {response.status_code}"
                     print(f"\nError: {error_msg}")
-                    # print(f"Response content: {response.content}")
                     response.failure(error_msg)
 
-                # print(f"Complete response text: {complete_text}")
                 num_output_tokens = len(complete_text.split())
                 output_cost = num_output_tokens * TOKEN_COST["output"][model_id]
                 total_cost = input_cost + output_cost
                 total_time = int(time.time() * 1000) - request_initiation_time
                 tokens_per_second = num_output_tokens / (total_time / 1000)
-                # print(f"Total response time: {total_time} ms")
-                # print(f"Response tokens: {num_output_tokens}")
-                # print(f"Response t/s: {tokens_per_second}")
-                # print(f"Valid response: {content_validated}")
-                # print(f"Total cost: {total_cost}")
                 print(f"\nCompletion response status code: {response.status_code}\n")
                 self.environment.custom_event.fire(
                     start_time=self.start_time,
@@ -303,13 +292,54 @@ class WebsiteUser(HttpUser):
             catch_response=True,
             verify=False,
             stream=False,
+            headers=headers,
         ) as response:
             try:
                 print(f"Completed response status: {response.status_code}\n")
             except:
                 print(f"Failed to parse response: {response.text}\n")
 
-        # print("=== Chat completion request finished ===\n")
+
+    @task
+    def file_upload(self):
+        current_time = int(time.time())
+
+        print(f"\n===Starting new file upload request ===")
+        print(f"Current time: {current_time}")
+
+        pdf_filepath = './test2.pdf'
+        request_initiation_time = int(time.time() * 1000)
+        total_time = 0
+        try:
+            with open(pdf_filepath, 'rb') as f:
+            
+                with self.client.post(
+                    "/api/v1/files/",
+                    files={"file": f},
+                    catch_response=True,
+                    stream=True
+                ) as response:
+
+                    try:
+                        if response.status_code != 200:
+                            error_msg = f"Received status code: {response.status_code}"
+                            print(f"\nError: {error_msg}")
+                            print(f"Response content: {response.content}")
+                            response.failure(error_msg)
+
+                        print(f"Total response time: {total_time} ms")
+                        print(f"\nResponse status code: {response.status_code}\n")
+                        print("=== PDF File upload finished ===\n")
+
+                    except Exception as e:
+                        total_time = int(time.time() * 1000) - request_initiation_time
+                        error_msg = f"An error occured when trying to upload the file: {e}"
+                        response.failure(e)
+
+        except FileNotFoundError as fnfe:
+            total_time = int(time.time() * 1000) - request_initiation_time
+            error_msg = f"Error occurred trying to access the file {pdf_filepath}: {fnfe}"
+            print(f"An error occurred trying to access the file {pdf_filepath}: {fnfe}")
 
     # Define a custom event for logging additional metrics
     @events.init.add_listener
