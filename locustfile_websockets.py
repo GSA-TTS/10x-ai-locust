@@ -121,14 +121,30 @@ class WebSocketClient:
         while self.is_open and self.conn:
             try:
                 message = self.conn.recv()
+                print(f"RECEIVED: {message[:100]}..." if len(message) > 100 else f"RECEIVED: {message}")
                 self.messages.append(message)
                 
-                # If this is a completion message, set the event
+                # Log different types of socket.io messages
+                if message.startswith("0"):
+                    print(f"Socket.IO handshake message received")
+                elif message.startswith("40"):
+                    print(f"Socket.IO namespace connect confitmation received")
+                elif message.startswith("2"):
+                    print(f"Socket.IO ping received, sending pong")
+                    self.conn.send("3")
+
+                # if this is a completion message set the event
                 if "42[\"message\"" in message and "assistant" in message:
+                    print(f"Assistant response message detected, signaling response event")
                     self.response_event.set()
+                elif "42[" in message:
+                    print(f"Other Socket.IO event message received")
+
             except Exception as e:
                 if self.is_open:  # Only log errors if we're supposed to be connected
                     self.error = f"WebSocket receive error: {str(e)}"
+                    print(f"ERROR: {error_msg}")
+                    self.error = error_msg
                     self.is_open = False
                 break
     
@@ -146,15 +162,19 @@ class WebSocketClient:
             # Format the message as a Socket.IO event
             # Socket.IO message format: "42" + JSON array with event name and payload
             message = '42["message",' + json.dumps(payload) + ']'
+            print(f"SENDING: {message[:100]}..." if len(message) > 100 else f"SENDING: {message}")
             self.conn.send(message)
+            print(f"Message sent, waiting for response (timeout: 60s)...")
             
             # Wait for the response with a timeout
             if self.response_event.wait(timeout=60):  # 60-second timeout
                 # Process received messages to extract the actual response
+                print(f"Response event triggered, processing {len(self.messages)} messages in queue")
                 for msg in list(self.messages):
                     if "42[\"message\"" in msg and "assistant" in msg:
                         response_text = msg
                         self.messages.remove(msg)
+                        print(f"Found matching response message")
                         break
                 
                 request_event(
@@ -168,6 +188,12 @@ class WebSocketClient:
                 return True, response_text
             else:
                 error_msg = "Timeout waiting for response"
+                print(f"Timeout reached. Current message queue has {len(self.messages)} messages")
+                # print first few messages in queue for debugging
+                for i, msg in enumerate(self.messages[:3]):
+                    print(f"Queue message {i}: {msg[:100]}..." if len(msg) > 100 else f"Queue message {i}: {msg}")
+
+
                 request_event(
                     request_type="WebSocket",
                     name=name or "Chat Message",
