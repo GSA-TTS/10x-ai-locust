@@ -1,0 +1,10 @@
+type,model_id,time_to_first_byte,time_to_first_token,total_time,num_output_tokens,tokens_per_second,content_validated,total_cost,status_code
+chat_completion,bedrock_claude_haiku35_pipeline_mock,756,830,10041,271,26.989343690867443,True,0.0,200
+chat_completion,bedrock_claude_haiku35_pipeline_mock,717,1015,12031,271,22.525143379602692,True,0.0,200
+chat_completion,bedrock_claude_haiku35_pipeline_mock,728,752,12594,271,21.518183261870732,True,0.0,200
+chat_completion,bedrock_claude_haiku35_pipeline_mock,725,725,12918,271,20.978479640811273,True,0.0,200
+chat_completion,bedrock_claude_haiku35_pipeline_mock,702,702,11918,271,22.738714549421044,True,0.0,200
+chat_completion,bedrock_claude_haiku35_pipeline_mock,876,881,10948,271,24.75337961271465,True,0.0,200
+chat_completion,bedrock_claude_haiku35_pipeline_mock,770,773,10317,271,26.267325772996024,True,0.0,200
+chat_completion,bedrock_claude_haiku35_pipeline_mock,792,793,9988,271,27.132559070885062,True,0.0,200
+chat_completion,bedrock_claude_haiku35_pipeline_mock,824,824,10182,271,26.615596150068747,True,0.0,200
